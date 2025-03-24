@@ -125,7 +125,7 @@ class MatrixeNamed:
                         self.matrix[np.logical_or(np.isinf(xv), np.isinf(yv))] = np.nan
                         xv[np.isinf(xv)] = np.max(xv[np.logical_not(np.isinf(xv))])
                         yv[np.isinf(yv)] = np.max(yv[np.logical_not(np.isinf(yv))])
-                        print(xv)
+                        # print(xv)
                     plt.pcolormesh(xv, yv, self.matrix, cmap="viridis")
                 else:
                     plt.scatter(xv, yv, c=self.matrix, cmap="viridis")
@@ -158,7 +158,7 @@ class MatrixeNamed:
             y = self.axis[axis2][0].flatten()
             X, Y = np.meshgrid(x, y, indexing="ij")  # Create grid
             nan_mask = np.isnan(X) | np.isnan(Y) #| np.isnan(self.matrix) | np.isinf(X) | np.isinf(Y) | np.isinf(self.matrix)
-            print(nan_mask.shape, self.matrix.shape)
+            # print(nan_mask.shape, self.matrix.shape)
             X[X==np.nan] = 0
             Y[X==np.nan] = 0
             self.matrix[nan_mask.T] = np.nan
@@ -237,7 +237,12 @@ class MatrixeNamed:
         
         # on recupere la nouvelle matrice UNIQUEMENT sur l'axe en question
         num_axis = list(self.axis.keys()).index(axis)
-        commande = f"self.matrix[{':, '*num_axis}indices.flatten()]"
+        if num_axis == len(self.matrix.shape)-1:
+            commande = f"self.matrix[{':, '*max(num_axis-2, 0)}indices.flatten(), :]"
+        elif num_axis == len(self.matrix.shape)-2:
+            commande = f"self.matrix[{':, '*max(num_axis-1, 0)} :, indices.flatten()]"
+        else:
+            commande = f"self.matrix[{':, '*num_axis}indices.flatten()]"
         new_matrix = eval(commande)     # maybe not the more beautiful but idk how to do it better
         # if axis == "abscisse":
         #     new_matrix = self.matrix[:, indices.flatten()]
@@ -253,11 +258,12 @@ class MatrixeNamed:
             self.axis[axis] = new_axis
         else:
             # let s create the new matrix
+            all_axis = list(self.axis.values())
             if num_axis == len(self.axis.keys())-1:
-                axis_construction = self.axis[:num_axis] + [new_axis]
+                axis_construction = all_axis[:num_axis] + [new_axis]
             else:
-                axis_construction = self.axis[:num_axis] + [new_axis] + self.axis[num_axis+1:]
-            new_matrix = MatrixeNamed(new_matrix, self.name_matrix, axis_construction)
+                axis_construction = all_axis[:num_axis] + [new_axis] + all_axis[num_axis+1:]
+            new_matrix = MatrixeNamed(new_matrix, self.name_matrix, axis_construction, denomination_axis=list(self.axis.keys()))
             # if axis == "abscisse":
             #     new_matrix = MatrixeNamed(new_matrix, self.name_matrix, abscisse=new_axis, ordonnee=self.axis["ordonnee"])
             # else:
@@ -302,7 +308,13 @@ class MatrixeNamed:
 
         # on recupere la nouvelle matrice UNIQUEMENT sur l'axe en question
         num_axis = list(self.axis.keys()).index(axis)
-        commande = f"self.matrix[{':, '*num_axis}index]"
+        if num_axis == len(self.matrix.shape)-1:
+            commande = f"self.matrix[{':, '*max(num_axis-2, 0)}index, :]"
+        elif num_axis == len(self.matrix.shape)-2:
+            commande = f"self.matrix[{':, '*max(num_axis-1, 0)} :, index]"
+        else:
+            commande = f"self.matrix[{':, '*num_axis}index]"
+        
         new_matrix = eval(commande)     # maybe not the more beautiful but idk how to do it better
 
         return new_matrix
