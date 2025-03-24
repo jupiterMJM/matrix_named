@@ -13,7 +13,7 @@ import pyqtgraph as pg
 
 
 class MatrixeNamed:
-    def __init__(self, matrix:np.array, name_matrix:str, axis:list[list[np.array|list, str, str]], denomination_axis:list=None):
+    def __init__(self, matrix:np.array, name_matrix:str, axis:list[list[list, str, str]], denomination_axis:list=None):
         """
         :param: matrix: np.array, the values of the numpy matrix
         :param: name_matrix: str, the name of the matrix (what it represents)
@@ -33,7 +33,7 @@ class MatrixeNamed:
         assert len(denomination_axis) == len(axis), "Denomination of axis must be coherent with the number of axis"
 
         self.axis = dict()
-        for axe in axis:
+        for i, axe in enumerate(axis):
             if len(axe) != 3:
                 raise ValueError("Axis must follow the format [np.array, str, str] for [values, name, unit]")
             self.axis[denomination_axis[i]] = [np.array(axe[0]), *axe[1:]]
@@ -42,23 +42,30 @@ class MatrixeNamed:
         assert len(self.axis.keys()) == len(self.matrix.shape), "Dimensions non cohérentes"	
 
     def __str__(self):
+        """
+        just to print some info about the matrix
+        """
         message = f"""Matrice : {self.name_matrix}
 {"\n".join([f"{key} : {value}" for key, value in self.axis.items()])}
 """
         return message+str(self.matrix)
     
-    def apply_transform_on_axis(self, axis:str, fonction:callable, new_name:str=None, new_unit:str=None):
+    def apply_transform_on_axis(self, axis:str, fonction:callable, new_name:str=None, new_unit:str=None, force_apply:bool=False):
         """
-        :param: axis: l'axe surlequel la transformation doit etre appliquée
-        :param: fonction: la fonction de transformation
-        :note: on ne fait pr l'instant que d'appliquer directement la transformation sur l'axe
-        :note: il est necessaire que la transformee soit monotone sur l intervalle considéré, si ce n'est pas le cas, une erreur est levée
+        :param: axis : the axis on which the transformation must be applied
+        :param: fonction : the transformation function
+        :param: new_name : the new name of the axis
+        :param: new_unit : the new unit of the axis
+        :param: force_apply : if True, the transformation is applied even if it is not monotone (not recommended, because it may crashes afterward)
+        :note: we only apply the transformation directly on the axis
+        :note: it is necessary that the transformation be monotone on the considered interval, if not an error is raised
+        :note: can be used as a conversion function on the axis
         """
         self.axis[axis][0] = np.apply_along_axis(fonction, axis=0, arr=self.axis[axis][0])
 
     
-        if not (np.all(np.diff(self.axis[axis][0]) > 0) or np.all(np.diff(self.axis[axis][0]) < 0)):
-            raise ValueError("La transformation n'est pas monotone sur l'intervalle considéré")
+        if not force_apply and not (np.all(np.diff(self.axis[axis][0]) > 0) or np.all(np.diff(self.axis[axis][0]) < 0)):
+            raise ValueError("The tranformation is not monotone on the considered interval")
 
         if new_unit is not None:
             self.axis[axis][2] = new_unit
@@ -67,16 +74,23 @@ class MatrixeNamed:
 
     def apply_transform_on_matrix(self, fonction:callable, on_place:bool=True):
         """
-        :param: fonction: la fonction de transformation qui doit etre applicable sur une matrice
+        :param: fonction : the transformation function that will be applied to the matrix 
+        :note: for now, the function must be appliable on a random matrix numpy
         """
         if on_place:
             self.matrix = fonction(self.matrix)
         else:
             return fonction(self.matrix)
 
-    def plot(self, title:str=None, ax=None, pcolormesh:bool=True, indicate_max:bool=False, pyqt_plot_item=None, check_for_nan:bool=True):
+    def plot(self, title:str=None, axis_to_be_plot:list[str]=None, ax=None, pcolormesh:bool=True, indicate_max:bool=False, pyqt_plot_item=None, check_for_nan:bool=True):
         """
-        :note: on ne fait que de tracer la matrice pour l'instant
+        :param: title: the title of the plot
+        :param: ax: the axis on which the plot will be done (if you want to insert the plot in a subplot)
+        :param: pcolormesh: if True, the matrix will be plotted as a grid, if False, the matrix will be plotted as a scatter plot, not recommended for big matrix
+        :param: indicate_max: if True, the maximum value of the matrix will be indicated on the plot
+        :param: pyqt_plot_item: if not None, the plot will be done with pyqtgraph, the plot will be done on the pyqt_plot_item
+        :param: check_for_nan: if True, the points where the matrix is nan or inf will be ignored
+        :note: for now, we only plot the matrix
         :note: there are 2 ways to plot the matrix : scatter or pcolormesh
             scatter : the matrix is plotted as a scatter plot : each point corresponds to a value of the matrix
                 :cons: verry long to plot for big matrix
@@ -84,15 +98,28 @@ class MatrixeNamed:
                 :pros: faster to plot and better for big matrix
             therefore, it is advised to use pcolormesh but we keep scatter in case of
         :param: indicate_max: if True, the maximum value of the matrix will be indicated on the plot
+        # TODO select the axis (and therefore enables to work with several dimensionnal data)
         """
+        if len(self.matrix.shape) == 1:
+            # we plot directly
+            plt.figure()
+            plt.plot(self.axis[self.axis.keys[0]][0], self.matrix)
+            plt.xlabel("{} ({})".format(*self.axis[self.axis.keys[0]][1:]))
+            plt.ylabel(self.name_matrix)
+            plt.title(title)
+            return
+
+        if axis_to_be_plot is None:
+            axis1, axis2 = list(self.axis.keys())[:2]
+
         if pyqt_plot_item is None:
             # produit cartesien des axes
-            xv, yv = np.meshgrid(self.axis["abscisse"][0], self.axis["ordonnee"][0])
+            xv, yv = np.meshgrid(self.axis[axis1][0], self.axis[axis2][0])
             # print(self.matrix.reshape(produit(*self.matrix.shape)))
             if ax is None:
                 plt.figure()
                 if pcolormesh:
-                    if check_for_nan:
+                    if check_for_nan:   # TODO looks like there may be an error here
                         # ignore points where matrix is either nan or inf
                         self.matrix[np.logical_or(np.isinf(xv), np.isinf(yv))] = np.nan
                         xv[np.isinf(xv)] = np.max(xv[np.logical_not(np.isinf(xv))])
@@ -103,8 +130,8 @@ class MatrixeNamed:
                     plt.scatter(xv, yv, c=self.matrix, cmap="viridis")
                 plt.colorbar(label=self.name_matrix)
                 plt.title(title)
-                plt.xlabel("{} ({})".format(*self.axis['abscisse'][1:]))
-                plt.ylabel("{} ({})".format(*self.axis['ordonnee'][1:]))
+                plt.xlabel("{} ({})".format(*self.axis[axis1][1:]))
+                plt.ylabel("{} ({})".format(*self.axis[axis2][1:]))
                 if indicate_max:
                     plt.scatter(xv.flatten()[np.argmax(self.matrix)], yv.flatten()[np.argmax(self.matrix)], color="red", marker="x")
             else:
@@ -115,19 +142,19 @@ class MatrixeNamed:
                     ax.pcolormesh(xv, yv, self.matrix, cmap="viridis")
                 else:
                     ax.scatter(xv, yv, c=self.matrix, cmap="viridis")
-                ax.set_xlabel("{} ({})".format(*self.axis['abscisse'][1:]))
-                ax.set_ylabel("{} ({})".format(*self.axis['ordonnee'][1:]))
+                ax.set_xlabel("{} ({})".format(*self.axis[axis1][1:]))
+                ax.set_ylabel("{} ({})".format(*self.axis[axis2][1:]))
                 ax.set_title(title)
 
         else:  # on doit plot avec pyqtgraph
             img_item = pg.ImageItem()
             img_item.setImage(self.matrix.T)        # see notes of setImage in https://pyqtgraph.readthedocs.io/en/latest/api_reference/graphicsItems/imageitem.html, Transpose because PyQtGraph uses row-major format
             img_item.setColorMap("viridis")
-            pyqt_plot_item.setLabel('left', "{} ({})".format(*self.axis['ordonnee'][1:]))
-            pyqt_plot_item.setLabel('bottom', "{} ({})".format(*self.axis['abscisse'][1:]))
+            pyqt_plot_item.setLabel('left', "{} ({})".format(*self.axis[axis2][1:]))
+            pyqt_plot_item.setLabel('bottom', "{} ({})".format(*self.axis[axis1][1:]))
 
-            x = self.axis['abscisse'][0].flatten()
-            y = self.axis['ordonnee'][0].flatten()
+            x = self.axis[axis1][0].flatten()
+            y = self.axis[axis2][0].flatten()
             X, Y = np.meshgrid(x, y, indexing="ij")  # Create grid
             nan_mask = np.isnan(X) | np.isnan(Y) #| np.isnan(self.matrix) | np.isinf(X) | np.isinf(Y) | np.isinf(self.matrix)
             print(nan_mask.shape, self.matrix.shape)
@@ -144,8 +171,8 @@ class MatrixeNamed:
             x_axis = pyqt_plot_item.getAxis('bottom')
             y_axis = pyqt_plot_item.getAxis('left')
 
-            x_axis.setTicks([[(i, str(i)) for i in range(len(self.axis['abscisse'][0]))]])
-            y_axis.setTicks([[(i, str(i)) for i in range(len(self.axis['ordonnee'][0]))]])
+            x_axis.setTicks([[(i, str(i)) for i in range(len(self.axis[axis1][0]))]])
+            y_axis.setTicks([[(i, str(i)) for i in range(len(self.axis[axis2][0]))]])
             pyqt_plot_item.addItem(img_item)
             # pyqt_plot_item.autoRange()
             # pyqt_plot_item.getViewBox().autoRange()
@@ -153,8 +180,11 @@ class MatrixeNamed:
 
     def plot_3d(self, title:str=None):
         """
-        :note: on ne fait que de tracer la matrice pour l'instant
+        :param: title: the title of the plot
+        :note: for now, we only plot the matrix
+        :note: this function allows to plot the matrix in 3D (instead of a colormap)
         """
+        # TODO better deal with the axis and multi dimensionnal data
         # produit cartesien des axes
         xv, yv = np.meshgrid(self.axis["abscisse"][0], self.axis["ordonnee"][0])
         fig = plt.figure()
@@ -169,9 +199,12 @@ class MatrixeNamed:
     
     def crop_matrix(self, axis:str, bornes:tuple, on_place:bool=True):
         """
-        :param: axis: l'axe sur lequel on doit croper
-        :param: bornes: les bornes de l'axe
+        :param: axis: the axis on which we must crop the matrix
+        :param: bornes: the bounds of the axis
+        :param: on_place: if True, the matrix is cropped in place, if False, a new matrix is returned
+        :note: the matrix is cropped on the axis in question
         """
+        # TODO deal with multidmensionnal data
         # on recupere les indices des bornes pour l'axe en question
         indices = np.logical_and(self.axis[axis][0] >= bornes[0], self.axis[axis][0] <= bornes[1])
         
@@ -197,10 +230,13 @@ class MatrixeNamed:
                 new_matrix = MatrixeNamed(new_matrix, self.name_matrix, abscisse=self.axis["abscisse"], ordonnee=new_axis)
             return new_matrix
         
-    def sum_along_axis(self, axis:str):
+    def sum_along_axis(self, axis:str) -> tuple[np.array, np.array]:
         """
-        :param: axis: l'axe sur lequel on doit sommer (cad l'indice que l'on fait varier)
+        :param: axis: the axis along which we have to sum
+        :note: we sum the matrix along the axis in question
+        :return: the sum and the axis along which the sum was made
         """
+        # TODO deal with multidmensionnal data
         if axis == "abscisse":
             somme = np.sum(self.matrix, axis=1)
             axe_retour = "ordonnee"
@@ -210,22 +246,17 @@ class MatrixeNamed:
         return somme, self.axis[axe_retour][0]
     
     def iloc(self, axis:str, value:int):
-        """
-        :param: axis: l'axe sur lequel on doit chercher
-        :param: value: la valeur à chercher
-        :note: on ne fait que de l'interpolation linéaire pour l'instant
-        :note: inspirer de la fonction pandas.DataFrame.iloc
-        """
-        pass # TODO
+        raise Exception("Not implemented yet") # TODO
 
     def loc(self, axis:str, value:float, take_the_closest:bool=True):
         """
-        :param: axis: l'axe sur lequel on doit chercher
-        :param: value: la valeur à chercher
-        :note: on ne fait que de l'interpolation linéaire pour l'instant
-        :note: inspirer de la fonction pandas.DataFrame.loc
-        :note: si axis=="abscisse", on renvoie la colonne correspondante
+        :param: axis: the axis on which we must search
+        :param: value: the value to search
+        :param: take_the_closest: if True, we take the closest value, if False, we take the exact value
+        :return: the line or the column corresponding to the value
+        :note: inspired by pandas
         """
+        # TODO deal with multidmensionnal data
         # on recupere l'indice le plus proche
         if take_the_closest:
             index = np.argmin(np.abs(self.axis[axis][0] - value))
@@ -244,34 +275,9 @@ class MatrixeNamed:
     
 
 
-def interpolate_matrix(matrix:MatrixeNamed, axis:str):
-    """
-    :param: matrix: la matrice à interpoler
-    :param: axis: l'axe sur lequel on doit interpoler
-    :note: on ne fait que de l'interpolation linéaire pour l'instant
-    :note: l'interpolation sera faite en prenant le plus petit pas d'axe
-    :warning: not tested yet (bcs not needed)
-    """
-    # on recupere le plus petit pas d'axe
-    step = np.min(np.abs(np.diff(matrix.axis[axis][0])))
-    # on recupere les bornes de l'axe
-    bornes = [matrix.axis[axis][0][0], matrix.axis[axis][0][-1]]
-    print(step)
-    # on cree le nouvel axe
-    new_axis = np.arange(bornes[0], bornes[1], step)
-    # on cree la nouvelle matrice
-    new_matrix = np.zeros((len(new_axis), matrix.matrix.shape[1]))
-    # on interpole
-    for i in range(matrix.matrix.shape[1]):
-        new_matrix[:, i] = np.interp(new_axis, matrix.axis[axis][0], matrix.matrix[:, i])
-    # on cree la nouvelle matrice
-    new_matrix = MatrixeNamed(new_matrix, matrix.name_matrix, abscisse=[new_axis, *matrix.axis[axis][1:]], ordonnee=matrix.axis["ordonnee"])
-    return new_matrix
-
-
 
 
 if __name__ == "__main__" :
-    test = MatrixeNamed(np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]], dtype=np.float32), "matrice test", abscisse=[[1, 2, 3], "Duree", "s"], ordonnee=[[4, 5, 6] , "Distance", "m"])
-    test.crop_matrix("abscisse", (1.5, 2.5))
-    print(test.matrix)
+    test = MatrixeNamed(np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]], dtype=np.float32), "matrice test", [[[1, 2, 3], "Duree", "s"], [[4, 5, 6] , "Distance", "m"]])
+    test.plot()
+    plt.show()
