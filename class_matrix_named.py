@@ -85,6 +85,7 @@ class MatrixeNamed:
     def plot(self, title:str=None, axis_to_be_plot:list[str]=None, ax=None, pcolormesh:bool=True, indicate_max:bool=False, pyqt_plot_item=None, check_for_nan:bool=True):
         """
         :param: title: the title of the plot
+        :param: axis_to_be_plot: the axis to be plotted, if None, the first two axes are plotted
         :param: ax: the axis on which the plot will be done (if you want to insert the plot in a subplot)
         :param: pcolormesh: if True, the matrix will be plotted as a grid, if False, the matrix will be plotted as a scatter plot, not recommended for big matrix
         :param: indicate_max: if True, the maximum value of the matrix will be indicated on the plot
@@ -98,7 +99,6 @@ class MatrixeNamed:
                 :pros: faster to plot and better for big matrix
             therefore, it is advised to use pcolormesh but we keep scatter in case of
         :param: indicate_max: if True, the maximum value of the matrix will be indicated on the plot
-        # TODO select the axis (and therefore enables to work with several dimensionnal data)
         """
         if len(self.matrix.shape) == 1:
             # we plot directly
@@ -111,11 +111,12 @@ class MatrixeNamed:
 
         if axis_to_be_plot is None:
             axis1, axis2 = list(self.axis.keys())[:2]
+        else:
+            axis1, axis2 = axis_to_be_plot
 
-        if pyqt_plot_item is None:
+        if pyqt_plot_item is None:      # we plot with matplotlib
             # produit cartesien des axes
             xv, yv = np.meshgrid(self.axis[axis1][0], self.axis[axis2][0])
-            # print(self.matrix.reshape(produit(*self.matrix.shape)))
             if ax is None:
                 plt.figure()
                 if pcolormesh:
@@ -178,23 +179,45 @@ class MatrixeNamed:
             # pyqt_plot_item.getViewBox().autoRange()
 
 
-    def plot_3d(self, title:str=None):
+    def plot_3d(self, title:str=None, axis_to_be_plot:list[str]=None):
         """
         :param: title: the title of the plot
+        :param: axis_to_be_plot: the axis to be plotted, if None, the first two axes are plotted
+        :note: if 3 axis are given, the order is the following : x, y, z and the values of the matrix are in the colormap
+            but if 2 are given, the order is the following : x, y and the values of the matrix are in the z axis
+            by default we consider that we want only the first two axes
         :note: for now, we only plot the matrix
         :note: this function allows to plot the matrix in 3D (instead of a colormap)
         """
         # TODO better deal with the axis and multi dimensionnal data
         # produit cartesien des axes
-        xv, yv = np.meshgrid(self.axis["abscisse"][0], self.axis["ordonnee"][0])
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        ax.plot_surface(xv, yv, self.matrix)
-        ax.set_xlabel("{} ({})".format(*self.axis['abscisse'][1:]))
-        ax.set_ylabel("{} ({})".format(*self.axis['ordonnee'][1:]))
-        ax.set_zlabel(self.name_matrix)
-        plt.title(title)
-        plt.legend() 
+        if axis_to_be_plot is None:
+            axis1, axis2 = list(self.axis.keys())[:2]
+
+        if len(axis_to_be_plot) == 2:
+            axis1, axis2 = axis_to_be_plot
+            xv, yv = np.meshgrid(self.axis[axis1][0], self.axis[axis2][0])
+            fig = plt.figure()
+            ax = fig.add_subplot(111, projection='3d')
+            ax.plot_surface(xv, yv, self.matrix)
+            ax.set_xlabel("{} ({})".format(*self.axis['abscisse'][1:]))
+            ax.set_ylabel("{} ({})".format(*self.axis['ordonnee'][1:]))
+            ax.set_zlabel(self.name_matrix)
+            plt.title(title)
+            plt.legend() 
+        elif len(axis_to_be_plot) == 3:
+            axis1, axis2, axis3 = axis_to_be_plot
+            xv, yv, zv = np.meshgrid(self.axis[axis1][0], self.axis[axis2][0], self.axis[axis3][0])
+            fig = plt.figure()
+            ax = fig.add_subplot(111, projection='3d')
+            ax.scatter(xv, yv, zv, c=self.matrix)
+            ax.set_xlabel("{} ({})".format(*self.axis[axis1][1:]))
+            ax.set_ylabel("{} ({})".format(*self.axis[axis2][1:]))
+            ax.set_zlabel("{} ({})".format(*self.axis[axis3][1:]))
+            plt.title(title)
+            plt.legend()
+        else:
+            raise ValueError("The number of axis to be plot3D must be 2 or 3")
 
     
     def crop_matrix(self, axis:str, bornes:tuple, on_place:bool=True):
@@ -205,15 +228,21 @@ class MatrixeNamed:
         :note: the matrix is cropped on the axis in question
         """
         # TODO deal with multidmensionnal data
+        assert type(axis) == str and axis in self.axis.keys(), "The axis must be a string and must be in the axis of the matrix"
+        assert len(bornes) == 2, "The bounds must be a tuple of 2 elements"
+        bornes = np.sort(bornes)
+
         # on recupere les indices des bornes pour l'axe en question
         indices = np.logical_and(self.axis[axis][0] >= bornes[0], self.axis[axis][0] <= bornes[1])
         
         # on recupere la nouvelle matrice UNIQUEMENT sur l'axe en question
-        
-        if axis == "abscisse":
-            new_matrix = self.matrix[:, indices.flatten()]
-        else:
-            new_matrix = self.matrix[indices.flatten(), :]
+        num_axis = list(self.axis.keys()).index(axis)
+        commande = f"self.matrix[{':, '*num_axis}indices.flatten()]"
+        new_matrix = eval(commande)     # maybe not the more beautiful but idk how to do it better
+        # if axis == "abscisse":
+        #     new_matrix = self.matrix[:, indices.flatten()]
+        # else:
+        #     new_matrix = self.matrix[indices.flatten(), :]
         # on recupere le nouvel axe
         new_axis = [self.axis[axis][0][indices], *self.axis[axis][1:]]
         new_axis[0] = new_axis[0].reshape(1, -1)
@@ -223,11 +252,16 @@ class MatrixeNamed:
             # on met a jour l'axe
             self.axis[axis] = new_axis
         else:
-            # on cree la nouvelle matrice
-            if axis == "abscisse":
-                new_matrix = MatrixeNamed(new_matrix, self.name_matrix, abscisse=new_axis, ordonnee=self.axis["ordonnee"])
+            # let s create the new matrix
+            if num_axis == len(self.axis.keys())-1:
+                axis_construction = self.axis[:num_axis] + [new_axis]
             else:
-                new_matrix = MatrixeNamed(new_matrix, self.name_matrix, abscisse=self.axis["abscisse"], ordonnee=new_axis)
+                axis_construction = self.axis[:num_axis] + [new_axis] + self.axis[num_axis+1:]
+            new_matrix = MatrixeNamed(new_matrix, self.name_matrix, axis_construction)
+            # if axis == "abscisse":
+            #     new_matrix = MatrixeNamed(new_matrix, self.name_matrix, abscisse=new_axis, ordonnee=self.axis["ordonnee"])
+            # else:
+            #     new_matrix = MatrixeNamed(new_matrix, self.name_matrix, abscisse=self.axis["abscisse"], ordonnee=new_axis)
             return new_matrix
         
     def sum_along_axis(self, axis:str) -> tuple[np.array, np.array]:
@@ -236,7 +270,9 @@ class MatrixeNamed:
         :note: we sum the matrix along the axis in question
         :return: the sum and the axis along which the sum was made
         """
-        # TODO deal with multidmensionnal data
+        if len(self.matrix.shape) != 2:
+            raise ValueError("Not implemented yet")
+            # TODO deal with multidmensionnal data
         if axis == "abscisse":
             somme = np.sum(self.matrix, axis=1)
             axe_retour = "ordonnee"
@@ -261,17 +297,15 @@ class MatrixeNamed:
         if take_the_closest:
             index = np.argmin(np.abs(self.axis[axis][0] - value))
         else:
-            index = np.argwhere(self.axis[axis]==value)
+            index = np.argwhere(self.axis[axis]==value) # index is used in the eval function
             print("Attention aux erreurs!!!")
-        
-        if axis == "abscisse":
-            # on recupere la colonne correspondante
-            return self.matrix[:, index]
-        elif axis == "ordonnee":
-            # on recupere la ligne correspondante
-            return self.matrix[index, :]
-        else:
-            raise ValueError("L'axe doit etre soit 'abscisse' soit 'ordonnee'")
+
+        # on recupere la nouvelle matrice UNIQUEMENT sur l'axe en question
+        num_axis = list(self.axis.keys()).index(axis)
+        commande = f"self.matrix[{':, '*num_axis}index]"
+        new_matrix = eval(commande)     # maybe not the more beautiful but idk how to do it better
+
+        return new_matrix
     
 
 
