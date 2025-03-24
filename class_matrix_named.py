@@ -13,22 +13,33 @@ import pyqtgraph as pg
 
 
 class MatrixeNamed:
-    def __init__(self, matrix:np.array, name_matrix:str, **axes):
+    def __init__(self, matrix:np.array, name_matrix:str, axis:list[list[np.array|list, str, str]], denomination_axis:list=None):
         """
-        :param: matrix: np.array, les valeurs de la matrice d'étude
-        :note: les tailles doivent correspondre
-        :note: l'orientation doit se faire dans un sens "logique" cad : on imagine que la matrix est une image alors les axes sont les axes de l'image de la gauche vers la droite et de bas en haut
+        :param: matrix: np.array, the values of the numpy matrix
+        :param: name_matrix: str, the name of the matrix (what it represents)
+        :param: axis: list[list[np.array, str, str]], the axes of the matrix, BUT it is ordered : for a 2D matrix, the first axis is the abscisse and the second is the ordinate
+        :param: denomination_axis: list[str], the denomination of the axis, if not specified, the default is axis_1, axis_2, ...
+                WHAT IS IT : there is two way to talk about an axis : the "physical" way aka what it means in reality and the "mathematical" way aka abscissa, ordinate, ...
+                the name of the axis is the "physical" way, and the denomination is the "mathematical" way1
+        :note: shape must be coherent (otherwise an error is raised)
+        :note: ORIENTATION : the orientation must be logical, i.e. we imagine that the matrix is an image so the axes are the axes of the image from left to right and from bottom to top
+        :note: denomination of the axis : unless specified the name of the axis are as follow : axis_1, axis_2, ...
         """
         self.name_matrix = name_matrix
         self.matrix = matrix
-        self.axis = axes
-        for key, value in self.axis.items():
-            if len(value) != 3:
-                raise ValueError("Les axes doivent etre de la forme [valeur, nom, unite]")
-            self.axis[key] = [np.array(value[0]), *value[1:]]
-        if len(self.matrix.shape) != 2:
-            raise ValueError("La matrice doit etre de dimension 2")
-        assert len(axes.keys()) == len(self.matrix.shape), "Dimensions non cohérentes"	
+
+        if denomination_axis is None:
+            denomination_axis = [f"axis_{i}" for i in range(len(axis))]
+        assert len(denomination_axis) == len(axis), "Denomination of axis must be coherent with the number of axis"
+
+        self.axis = dict()
+        for axe in axis:
+            if len(axe) != 3:
+                raise ValueError("Axis must follow the format [np.array, str, str] for [values, name, unit]")
+            self.axis[denomination_axis[i]] = [np.array(axe[0]), *axe[1:]]
+        # if len(self.matrix.shape) != 2:
+        #     raise ValueError("La matrice doit etre de dimension 2")
+        assert len(self.axis.keys()) == len(self.matrix.shape), "Dimensions non cohérentes"	
 
     def __str__(self):
         message = f"""Matrice : {self.name_matrix}
