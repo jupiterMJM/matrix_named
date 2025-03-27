@@ -27,6 +27,7 @@ class MatrixeNamed:
         """
         self.name_matrix = name_matrix
         self.matrix = matrix
+        self.dimension = len(self.matrix.shape)
 
         if denomination_axis is None:
             denomination_axis = [f"axis_{i}" for i in range(len(axis))]
@@ -80,9 +81,10 @@ class MatrixeNamed:
         if on_place:
             self.matrix = fonction(self.matrix)
         else:
-            return fonction(self.matrix)
+            # return a matrixeNamed
+            return MatrixeNamed(fonction(self.matrix), self.name_matrix, list(self.axis.values()), denomination_axis=list(self.axis.keys()))
 
-    def plot(self, title:str=None, axis_to_be_plot:list[str]=None, ax=None, pcolormesh:bool=True, indicate_max:bool=False, pyqt_plot_item=None, check_for_nan:bool=True):
+    def plot(self, title:str=None, axis_to_be_plot:list[str]=None, ax=None, label:str=None, pcolormesh:bool=True, indicate_max:bool=False, pyqt_plot_item=None, check_for_nan:bool=True):
         """
         :param: title: the title of the plot
         :param: axis_to_be_plot: the axis to be plotted, if None, the first two axes are plotted
@@ -100,13 +102,23 @@ class MatrixeNamed:
             therefore, it is advised to use pcolormesh but we keep scatter in case of
         :param: indicate_max: if True, the maximum value of the matrix will be indicated on the plot
         """
-        if len(self.matrix.shape) == 1:
-            # we plot directly
-            plt.figure()
-            plt.plot(self.axis[self.axis.keys[0]][0], self.matrix)
-            plt.xlabel("{} ({})".format(*self.axis[self.axis.keys[0]][1:]))
-            plt.ylabel(self.name_matrix)
-            plt.title(title)
+        if self.matrix.dtype == np.complex_:
+            matrice_to_plot = np.abs(self.matrix)
+        else:
+            matrice_to_plot = self.matrix
+        if self.dimension == 1:
+            if ax is None:
+                # we plot directly
+                plt.figure()
+                plt.plot(self.axis[list(self.axis.keys())[0]][0].flatten(), matrice_to_plot.flatten())
+                plt.xlabel("{} ({})".format(*self.axis[list(self.axis.keys())[0]][1:]))
+                plt.ylabel(self.name_matrix)
+                plt.title(title)
+            else:
+                ax.plot(self.axis[list(self.axis.keys())[0]][0].flatten(), matrice_to_plot.flatten(), label=label)
+                ax.set_xlabel("{} ({})".format(*self.axis[list(self.axis.keys())[0]][1:]))
+                ax.set_ylabel(self.name_matrix)
+                ax.set_title(title)
             return
 
         if axis_to_be_plot is None:
@@ -122,34 +134,34 @@ class MatrixeNamed:
                 if pcolormesh:
                     if check_for_nan:   # TODO looks like there may be an error here
                         # ignore points where matrix is either nan or inf
-                        self.matrix[np.logical_or(np.isinf(xv), np.isinf(yv))] = np.nan
+                        matrice_to_plot[np.logical_or(np.isinf(xv), np.isinf(yv))] = np.nan
                         xv[np.isinf(xv)] = np.max(xv[np.logical_not(np.isinf(xv))])
                         yv[np.isinf(yv)] = np.max(yv[np.logical_not(np.isinf(yv))])
                         # print(xv)
-                    plt.pcolormesh(xv, yv, self.matrix, cmap="viridis")
+                    plt.pcolormesh(xv, yv, matrice_to_plot, cmap="viridis")
                 else:
-                    plt.scatter(xv, yv, c=self.matrix, cmap="viridis")
+                    plt.scatter(xv, yv, c=matrice_to_plot, cmap="viridis")
                 plt.colorbar(label=self.name_matrix)
                 plt.title(title)
                 plt.xlabel("{} ({})".format(*self.axis[axis1][1:]))
                 plt.ylabel("{} ({})".format(*self.axis[axis2][1:]))
                 if indicate_max:
-                    plt.scatter(xv.flatten()[np.argmax(self.matrix)], yv.flatten()[np.argmax(self.matrix)], color="red", marker="x")
+                    plt.scatter(xv.flatten()[np.argmax(matrice_to_plot)], yv.flatten()[np.argmax(matrice_to_plot)], color="red", marker="x")
             else:
                 if pcolormesh:
-                    self.matrix[np.logical_or(np.isinf(xv), np.isinf(yv))] = np.nan
+                    matrice_to_plot[np.logical_or(np.isinf(xv), np.isinf(yv))] = np.nan
                     xv[np.isinf(xv)] = np.max(xv[np.logical_not(np.isinf(xv))])
                     yv[np.isinf(yv)] = np.max(yv[np.logical_not(np.isinf(yv))])
-                    ax.pcolormesh(xv, yv, self.matrix, cmap="viridis")
+                    ax.pcolormesh(xv, yv, matrice_to_plot, cmap="viridis")
                 else:
-                    ax.scatter(xv, yv, c=self.matrix, cmap="viridis")
+                    ax.scatter(xv, yv, c=matrice_to_plot, cmap="viridis")
                 ax.set_xlabel("{} ({})".format(*self.axis[axis1][1:]))
                 ax.set_ylabel("{} ({})".format(*self.axis[axis2][1:]))
                 ax.set_title(title)
 
         else:  # on doit plot avec pyqtgraph
             img_item = pg.ImageItem()
-            img_item.setImage(self.matrix.T)        # see notes of setImage in https://pyqtgraph.readthedocs.io/en/latest/api_reference/graphicsItems/imageitem.html, Transpose because PyQtGraph uses row-major format
+            img_item.setImage(matrice_to_plot.T)        # see notes of setImage in https://pyqtgraph.readthedocs.io/en/latest/api_reference/graphicsItems/imageitem.html, Transpose because PyQtGraph uses row-major format
             img_item.setColorMap("viridis")
             pyqt_plot_item.setLabel('left', "{} ({})".format(*self.axis[axis2][1:]))
             pyqt_plot_item.setLabel('bottom', "{} ({})".format(*self.axis[axis1][1:]))
@@ -161,7 +173,7 @@ class MatrixeNamed:
             # print(nan_mask.shape, self.matrix.shape)
             X[X==np.nan] = 0
             Y[X==np.nan] = 0
-            self.matrix[nan_mask.T] = np.nan
+            matrice_to_plot[nan_mask.T] = np.nan
             dx = np.diff(x)  # X bin widths
             dy = np.diff(y)  # Y bin widths
             scale_x = dx.mean()  # Approximate uniform width
@@ -237,13 +249,16 @@ class MatrixeNamed:
         
         # on recupere la nouvelle matrice UNIQUEMENT sur l'axe en question
         num_axis = list(self.axis.keys()).index(axis)
-        if num_axis == len(self.matrix.shape)-1:
-            commande = f"self.matrix[{':, '*max(num_axis-2, 0)}indices.flatten(), :]"
-        elif num_axis == len(self.matrix.shape)-2:
-            commande = f"self.matrix[{':, '*max(num_axis-1, 0)} :, indices.flatten()]"
+        if self.dimension > 1:
+            if num_axis == len(self.matrix.shape)-1:
+                commande = f"self.matrix[{':, '*max(num_axis-2, 0)}indices.flatten(), :]"
+            elif num_axis == len(self.matrix.shape)-2:
+                commande = f"self.matrix[{':, '*max(num_axis-1, 0)} :, indices.flatten()]"
+            else:
+                commande = f"self.matrix[{':, '*num_axis}indices.flatten()]"
+            new_matrix = eval(commande)     # maybe not the more beautiful but idk how to do it better
         else:
-            commande = f"self.matrix[{':, '*num_axis}indices.flatten()]"
-        new_matrix = eval(commande)     # maybe not the more beautiful but idk how to do it better
+            new_matrix = self.matrix[indices.flatten()].reshape(1, -1)
         # if axis == "abscisse":
         #     new_matrix = self.matrix[:, indices.flatten()]
         # else:
