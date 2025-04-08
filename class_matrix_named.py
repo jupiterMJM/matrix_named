@@ -84,7 +84,7 @@ class MatrixeNamed:
             # return a matrixeNamed
             return MatrixeNamed(fonction(self.matrix), self.name_matrix, list(self.axis.values()), denomination_axis=list(self.axis.keys()))
 
-    def plot(self, title:str=None, axis_to_be_plot:list[str]=None, ax=None, label:str=None, pcolormesh:bool=True, indicate_max:bool=False, pyqt_plot_item=None, check_for_nan:bool=True):
+    def plot(self, title:str=None, axis_to_be_plot:list[str]=None, ax=None, label:str=None, pcolormesh:bool=True, indicate_max:bool=False, pyqt_plot_item=None, check_for_nan:bool=True, cmap="turbo"):
         """
         :param: title: the title of the plot
         :param: axis_to_be_plot: the axis to be plotted, if None, the first two axes are plotted
@@ -102,7 +102,7 @@ class MatrixeNamed:
             therefore, it is advised to use pcolormesh but we keep scatter in case of
         :param: indicate_max: if True, the maximum value of the matrix will be indicated on the plot
         """
-        if self.matrix.dtype == np.complex_:
+        if self.matrix.dtype == np.complex128:
             matrice_to_plot = np.abs(self.matrix)
         else:
             matrice_to_plot = self.matrix
@@ -138,9 +138,9 @@ class MatrixeNamed:
                         xv[np.isinf(xv)] = np.max(xv[np.logical_not(np.isinf(xv))])
                         yv[np.isinf(yv)] = np.max(yv[np.logical_not(np.isinf(yv))])
                         # print(xv)
-                    plt.pcolormesh(xv, yv, matrice_to_plot, cmap="viridis")
+                    plt.pcolormesh(xv, yv, matrice_to_plot, cmap=cmap)
                 else:
-                    plt.scatter(xv, yv, c=matrice_to_plot, cmap="viridis")
+                    plt.scatter(xv, yv, c=matrice_to_plot, cmap=cmap)
                 plt.colorbar(label=self.name_matrix)
                 plt.title(title)
                 plt.xlabel("{} ({})".format(*self.axis[axis1][1:]))
@@ -152,9 +152,9 @@ class MatrixeNamed:
                     matrice_to_plot[np.logical_or(np.isinf(xv), np.isinf(yv))] = np.nan
                     xv[np.isinf(xv)] = np.max(xv[np.logical_not(np.isinf(xv))])
                     yv[np.isinf(yv)] = np.max(yv[np.logical_not(np.isinf(yv))])
-                    ax.pcolormesh(xv, yv, matrice_to_plot, cmap="viridis")
+                    ax.pcolormesh(xv, yv, matrice_to_plot, cmap=cmap)
                 else:
-                    ax.scatter(xv, yv, c=matrice_to_plot, cmap="viridis")
+                    ax.scatter(xv, yv, c=matrice_to_plot, cmap=cmap)
                 ax.set_xlabel("{} ({})".format(*self.axis[axis1][1:]))
                 ax.set_ylabel("{} ({})".format(*self.axis[axis2][1:]))
                 ax.set_title(title)
@@ -162,7 +162,7 @@ class MatrixeNamed:
         else:  # on doit plot avec pyqtgraph
             img_item = pg.ImageItem()
             img_item.setImage(matrice_to_plot.T)        # see notes of setImage in https://pyqtgraph.readthedocs.io/en/latest/api_reference/graphicsItems/imageitem.html, Transpose because PyQtGraph uses row-major format
-            img_item.setColorMap("viridis")
+            img_item.setColorMap(cmap)
             pyqt_plot_item.setLabel('left', "{} ({})".format(*self.axis[axis2][1:]))
             pyqt_plot_item.setLabel('bottom', "{} ({})".format(*self.axis[axis1][1:]))
 
@@ -333,6 +333,25 @@ class MatrixeNamed:
         new_matrix = eval(commande)     # maybe not the more beautiful but idk how to do it better
 
         return new_matrix
+    
+    def __add__(self, other):
+        """
+        :param: other: the other matrix to add
+        :note: we only add the matrix, not the axis
+        """
+        if isinstance(other, MatrixeNamed):
+            if self.matrix.shape != other.matrix.shape:
+                raise ValueError("Les matrices doivent avoir la meme forme")
+            if self.axis.keys() != other.axis.keys():
+                raise ValueError("Axis must have the same name")
+            for key in self.axis.keys():
+                if self.axis[key][1:] != other.axis[key][1:]:
+                    raise ValueError("Axis must have the same name and unit")
+                if not np.all(self.axis[key][0] == other.axis[key][0]):
+                    raise ValueError("Axis must have the same values")
+            return MatrixeNamed(self.matrix + other.matrix, self.name_matrix, list(self.axis.values()), denomination_axis=list(self.axis.keys()))
+        else:
+            raise Exception("Addition with something else than a MatrixeNamed is not implemented yet")
     
 
 
